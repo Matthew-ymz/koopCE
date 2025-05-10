@@ -113,7 +113,7 @@ class RandomFourierKernelApprox(KernelApproximation):
     >>> ka.fit(X_msd[:, 1:])  # Remove episode feature
     RandomFourierKernelApprox(n_components=10, random_state=1234)
     >>> ka.transform(X_msd[:, 1:])
-    array([...])
+    array(...)
     """
 
     _ft_lookup = {
@@ -318,7 +318,7 @@ class RandomBinningKernelApprox(KernelApproximation):
     >>> ka.fit(X_msd[:, 1:])  # Remove episode feature
     RandomBinningKernelApprox(n_components=10, random_state=1234)
     >>> ka.transform(X_msd[:, 1:])
-    array([...])
+    array(...)
     """
 
     _ddot_lookup = {
