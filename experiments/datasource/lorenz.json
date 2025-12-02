@@ -1,0 +1,19 @@
+{
+  "system_type": "lorenz",
+  "system_params": {
+    "sigma": 10.0,
+    "rho": 28.0,
+    "beta": 2.6666666666666665
+  },
+  "training": {
+    "t_span": [0, 50],
+    "n_points": 5000,
+    "noise_level": 0.0
+  },
+  "sindy": {
+    "poly_order": 3,
+    "threshold": 0.01
+  },
+  "seed": 42,
+  "description": "Lorenz attractor system configuration"
+}

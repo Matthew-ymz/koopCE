@@ -85,6 +85,9 @@ Temporary Items
 # *.iml
 # *.ipr
 
+# VScode settings folder
+.vscode/
+
 # CMake
 cmake-build-*/
 

@@ -1,0 +1,26 @@
+{
+  "system_type": "spring",
+  "system_params": {
+    "n_oscillators": 4,
+    "k_strong": 50.0,
+    "k_weak": 1.0,
+    "groups": {
+      "0": "a",
+      "1": "a",
+      "2": "b",
+      "3": "b"
+    },
+    "mass": 1.0
+  },
+  "training": {
+    "t_span": [0, 10],
+    "n_points": 1000,
+    "noise_level": 0.0
+  },
+  "sindy": {
+    "poly_order": 1,
+    "threshold": 0.1
+  },
+  "seed": 42,
+  "description": "Simplified spring oscillator system with 3 oscillators for faster processing"
+}
