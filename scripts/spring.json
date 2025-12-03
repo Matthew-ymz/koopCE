@@ -1,14 +1,13 @@
 {
   "system_type": "spring",
   "system_params": {
-    "n_oscillators": 4,
+    "n_oscillators": 3,
     "k_strong": 50.0,
     "k_weak": 1.0,
     "groups": {
       "0": "a",
       "1": "a",
-      "2": "b",
-      "3": "b"
+      "2": "b"
     },
     "mass": 1.0
   },

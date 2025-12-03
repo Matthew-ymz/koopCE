@@ -119,7 +119,8 @@ def train_sindy_model(x, t, feature_names=None, poly_order=3, threshold=0.01):
     # 创建 SINDy 模型
     model = ps.SINDy(
         feature_library=feature_library,
-        optimizer=optimizer
+        optimizer=optimizer,
+        discrete_time=True
     )
     
     # 训练模型
@@ -143,7 +144,7 @@ def train_sindy_model(x, t, feature_names=None, poly_order=3, threshold=0.01):
     return model
 
 
-def test_model(model, system, t_span=(0, 50), n_points=5000, 
+def test_model(model, system, t_span=(0, 50), n_points=5, 
                initial_conditions=None):
     """
     测试模型性能
@@ -179,7 +180,7 @@ def test_model(model, system, t_span=(0, 50), n_points=5000,
     # 生成真实测试数据
     t, x_true = system.generate_data(
         t_span=t_span,
-        n_points=n_points,
+        n_points=5,
         initial_conditions=initial_conditions
     )
     
@@ -191,8 +192,8 @@ def test_model(model, system, t_span=(0, 50), n_points=5000,
     print(f"预测时间范围: {t_span}")
     
     # 使用模型进行预测
-    x_pred = model.simulate(initial_conditions, t)
-    
+    x_pred = model.simulate(initial_conditions, 5)
+
     # 计算误差指标
     mse = mean_squared_error(x_true, x_pred)
     r2 = r2_score(x_true, x_pred)
