@@ -5,7 +5,7 @@
 ## 项目结构
 
 ```
-pykoop/                      # 项目根目录
+koopCE/                      # 项目根目录
 ├── data_generators/         # 动力学系统数据生成器（共享模块）
 │   ├── __init__.py         # 包初始化
 │   ├── base.py             # 动力学系统基类
@@ -52,10 +52,10 @@ pip install -r requirements.txt
 
 ```bash
 # 使用 Lorenz 系统配置
-python train_and_test.py --config ../../datasource/lorenz.json
+python train_and_test.py --config scripts/lorenz.json
 
 # 使用 Spring 系统配置
-python train_and_test.py --config ../../datasource/spring.json
+python train_and_test.py --config scripts/spring.json
 ```
 
 **注意**: `--config` 参数是必需的，程序通过配置文件来指定所有参数。
