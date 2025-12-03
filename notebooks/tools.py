@@ -343,9 +343,9 @@ def compute_cluster_order_parameters(theta, n_clusters):
         group_r.append(r_c)
     return group_r
 
-def plot_clustered_kuramoto(N=12, n_clusters=3, K_intra=2.0, K_inter=0.2, noise=0.0, T=30, dt=0.01):
+def plot_clustered_kuramoto(N=12, n_clusters=3, K_intra=2.0, K_inter=0.2, noise=0.0, T=30, dt=0.01, random_state=0):
     X_embed, theta_hist, t, K_matrix = generate_kuramoto_cluster_data_sin_cos(
-        N=N, n_clusters=n_clusters, K_intra=K_intra, K_inter=K_inter, dt=dt, T=T, noise=noise
+        N=N, n_clusters=n_clusters, K_intra=K_intra, K_inter=K_inter, dt=dt, T=T, noise=noise, random_state=random_state
     )
 
     r_total = compute_order_parameter(theta_hist)
