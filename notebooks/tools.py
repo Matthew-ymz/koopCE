@@ -375,4 +375,51 @@ def plot_clustered_kuramoto(N=12, n_clusters=3, K_intra=2.0, K_inter=0.2, noise=
 
     plt.tight_layout()
     plt.show()
-    return X_embed, K_matrix
+    return X_embed, theta_hist, t, K_matrix
+
+def matrix_l1_norm_manual(matrix):
+    """
+    手动计算矩阵的L1范数（不使用numpy）
+    """
+    
+    rows = len(matrix)
+    cols = len(matrix[0])
+    
+    # 计算每列的绝对值之和
+    column_sums = []
+    for j in range(cols):
+        col_sum = 0
+        for i in range(rows):
+            col_sum += abs(matrix[i][j])
+        column_sums.append(col_sum)
+    
+    # 返回最大的列和
+    return max(column_sums)
+
+def matrix_l0_norm_corrected(matrix, threshold=1e-10):
+    """
+    计算矩阵的L0范数（各列非零元素数量的最大值）
+    
+    参数:
+    matrix: numpy数组或可以转换为numpy数组的矩阵
+    threshold: 阈值，绝对值小于此值的元素视为零
+    
+    返回:
+    l0_norm: 矩阵的L0范数（整数）
+    column_norms: 各列的L0范数
+    """
+    matrix = np.array(matrix, dtype=float)
+    
+    # 应用阈值：将接近零的元素视为零
+    matrix_thresholded = np.where(np.abs(matrix) < threshold, 0, matrix)
+    
+    # 计算每列的非零元素数量
+    column_norms = []
+    for col in range(matrix_thresholded.shape[1]):
+        non_zero_count = np.count_nonzero(matrix_thresholded[:, col])
+        column_norms.append(non_zero_count)
+    
+    # 矩阵的L0范数是各列L0范数的最大值
+    l0_norm = max(column_norms)
+    
+    return l0_norm
