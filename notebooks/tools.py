@@ -294,16 +294,17 @@ def kuramoto_ode_cluster(theta, omega, K_matrix):
 
 def generate_kuramoto_cluster_data_sin_cos(
     N=12, n_clusters=3, K_intra=2.0, K_inter=0.2,
-    dt=0.01, T=30, noise=0.0, random_state=0
+    dt=0.01, T=30, noise=0.0, random_seed1=0, random_seed2=0
 ):
     """
     生成带‘团结构’的Kuramoto振子数据。
     团内耦合K_intra > 团间耦合K_inter。
     """
-    np.random.seed(random_state)
+    np.random.seed(random_seed1)
     t_steps = int(T / dt)
     t = np.arange(0, T, dt)
     omega = 2 * np.pi * (0.2 + 0.05 * np.random.randn(N))
+    np.random.seed(random_seed2)
     theta = np.random.uniform(0, 2 * np.pi, N)
 
     # --- 构造耦合矩阵 ---
@@ -343,9 +344,9 @@ def compute_cluster_order_parameters(theta, n_clusters):
         group_r.append(r_c)
     return group_r
 
-def plot_clustered_kuramoto(N=12, n_clusters=3, K_intra=2.0, K_inter=0.2, noise=0.0, T=30, dt=0.01, random_state=0):
+def plot_clustered_kuramoto(N=12, n_clusters=3, K_intra=2.0, K_inter=0.2, noise=0.0, T=30, dt=0.01, random_seed1=0, random_seed2=0):
     X_embed, theta_hist, t, K_matrix = generate_kuramoto_cluster_data_sin_cos(
-        N=N, n_clusters=n_clusters, K_intra=K_intra, K_inter=K_inter, dt=dt, T=T, noise=noise, random_state=random_state
+        N=N, n_clusters=n_clusters, K_intra=K_intra, K_inter=K_inter, dt=dt, T=T, noise=noise, random_seed1=random_seed1, random_seed2=random_seed2
     )
 
     r_total = compute_order_parameter(theta_hist)
