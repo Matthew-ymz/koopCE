@@ -329,16 +329,16 @@ def matrix_l0_norm_corrected(matrix, threshold=1e-10):
     
     return l0_norm
 
-def get_positive_contributions(sing_values):    
+def get_positive_contributions(sing_values):  
     ave_sig = []
-    for i in range(0, len(sing_values))[::-1]:
-        ave_sig.append(np.mean(sing_values[0:i]))
+    for i in range(len(sing_values)):
+        ave_sig.append(np.mean(sing_values[0:i+1]))
 
     output = []
     for id in range(len(ave_sig)-1):
-        diff = ave_sig[id+1] - ave_sig[id]
+        diff = ave_sig[id] - ave_sig[id+1]
         output.append(diff)
-    return output[::-1]
+    return output
 
 def compute_entropy(increments):
     if not increments:
