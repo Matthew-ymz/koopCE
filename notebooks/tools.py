@@ -1,6 +1,7 @@
 import pykoop
 import sklearn
 import math
+from typing import Union
 from sklearn.preprocessing import MaxAbsScaler, StandardScaler
 import matplotlib.pyplot as plt
 import numpy as np
@@ -414,3 +415,77 @@ def print_equations(coefficient_matrix, feature_names, target_names, threshold=1
         print(equation)
         print("-" * 30) # 分隔线
 
+def draw_fft(data: pd.DataFrame, dt: Union[str, float] = 'index', 
+             remove_dc: bool = True, max_f: float = 0, normalize: bool = True) -> pd.DataFrame:
+    """
+    对 DataFrame 数据进行 FFT 分析并绘图
+    
+    Parameters:
+    data: pd.DataFrame - 输入数据
+    dt: Union[str, float] - 采样间隔设置
+        - 'index': 使用 data.index 计算间隔（支持 datetime 类型）
+        - 0: 使用 cycle=1
+        - 非零实数: 使用 cycle=dt 作为采样周期
+    remove_dc: bool - 是否去除直流分量（默认 True）
+    max_f: float - 最大显示频率（默认 0 表示不限制）
+    normalize: bool - 是否对数据进行归一化（默认 True）
+        归一化方法：对每列减去均值并除以标准差
+    
+    Returns:
+    pd.DataFrame - FFT 结果，index 为频率，columns 与输入相同
+    """
+    # 步骤0: 归一化数据（如果需要）
+    if normalize:
+        data_processed = (data - data.mean()) / data.std()
+    else:
+        data_processed = data.copy()
+    
+    # 步骤1: 去除直流分量
+    if remove_dc:
+        data_processed = data_processed - data_processed.mean()
+    
+    # 获取数据点数
+    N = len(data_processed)
+    
+    # 步骤2: 对各列进行 FFT 变换
+    fft_result = np.fft.fft(data_processed.values, axis=0)
+    # 归一化并只保留正频率部分
+    fft_data = np.abs(fft_result / N)[:N//2]
+    
+    # 步骤3: 计算频率轴
+    if dt == 'index':
+        # 使用 index 计算采样周期
+        cycle = data.index[1] - data.index[0]
+        # 如果是 datetime 类型，转换为秒
+        if isinstance(cycle, pd.Timedelta):
+            cycle = cycle.total_seconds()
+    elif dt == 0:
+        cycle = 1
+    else:
+        # dt 是非零实数，作为采样周期
+        cycle = dt
+    
+    # 使用 fftfreq 生成频率轴，只取正频率部分
+    freq = np.fft.fftfreq(N, cycle)[:N//2]
+    
+    # 步骤4: 构建结果 DataFrame
+    result_df = pd.DataFrame(fft_data, index=freq, columns=data.columns)
+    
+    # 如果指定了最大频率，进行过滤
+    if max_f > 0:
+        result_df = result_df[result_df.index <= max_f]
+    
+    # 步骤5: 绘制频谱图
+    plt.figure(figsize=(10, 6))
+    for col in result_df.columns:
+        plt.plot(result_df.index, result_df[col], label=col)
+    
+    plt.xlabel('Frequency (Hz)', fontsize=12)
+    plt.ylabel('Amplitude', fontsize=12)
+    plt.title('FFT Spectrum', fontsize=14)
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+    
+    return result_df
