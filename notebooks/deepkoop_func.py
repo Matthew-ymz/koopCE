@@ -11,11 +11,10 @@ from torch.utils.data import Dataset, DataLoader
 from torch.utils.data import TensorDataset
 
 class KoopmanOperator(nn.Module):
-    def __init__(self, koopman_dim, delta_t, device="cpu"):
+    def __init__(self, koopman_dim, device="cpu"):
         super(KoopmanOperator, self).__init__()
 
         self.koopman_dim = koopman_dim
-        self.delta_t = delta_t
         self.device = device
         
         self.linear_evolution = nn.Linear(self.koopman_dim, self.koopman_dim, bias=False)
@@ -37,25 +36,24 @@ class KoopmanOperator(nn.Module):
         return Y
     
 class Lusch(nn.Module):
-    def __init__(self,input_dim,koopman_dim,hidden_dim,delta_t=0.01,device="cpu"):
+    def __init__(self, input_dim, koopman_dim, hidden_dim, device="cpu"):
         super(Lusch,self).__init__()
 
         self.encoder = nn.Sequential(nn.Linear(input_dim,hidden_dim),
-                                     nn.Tanh(),
+                                     nn.LeakyReLU(),
                                      nn.Linear(hidden_dim, hidden_dim),
-                                     nn.Tanh(),
+                                     nn.LeakyReLU(),
                                      nn.Linear(hidden_dim,koopman_dim))
 
         self.decoder = nn.Sequential(nn.Linear(koopman_dim,hidden_dim),
-                                     nn.Tanh(),
+                                     nn.LeakyReLU(),
                                      nn.Linear(hidden_dim, hidden_dim),
-                                     nn.Tanh(),
+                                     nn.LeakyReLU(),
                                      nn.Linear(hidden_dim,input_dim))
 
-        self.koopman = KoopmanOperator(koopman_dim,delta_t,device)
+        self.koopman = KoopmanOperator(koopman_dim, device)
 
         self.device = device
-        self.delta_t = delta_t
 
         # Normalization occurs inside the model
         self.register_buffer('mu', torch.zeros((input_dim,)))
@@ -88,10 +86,13 @@ class Lusch(nn.Module):
 def CE_loss(model):
     K_tensor = model.koopman.linear_evolution.weight
     _, S_tensor, _ = torch.linalg.svd(K_tensor, full_matrices=False)
-    S_max = S_tensor.max()
+    # S_max = S_tensor.max()
+    # loss = 0
+    # for i in range(S_tensor.size()[0]):
+    #     loss += S_tensor[i] * (S_max - S_tensor[i])
     loss = 0
     for i in range(S_tensor.size()[0]):
-        loss += S_tensor[i] * (S_max - S_tensor[i])
+        loss -= S_tensor[i]
     return loss
 
 def koopman_loss(x,model,Sp,T, alpha1=2, alpha2=1e-10, alpha_CE=0):
@@ -114,12 +115,11 @@ def koopman_loss(x,model,Sp,T, alpha1=2, alpha2=1e-10, alpha_CE=0):
     pred_loss = F.mse_loss(recover_koopman,x[:,1:Sp,:],)
     reconstruction_loss = F.mse_loss(recover_x,x)
     inf_loss = reconstruction_inf_loss + prediction_inf_loss
+    ce_loss = CE_loss(model)
 
-    if alpha_CE > 0:
-        loss = alpha1*(pred_loss + reconstruction_loss) + lin_loss + alpha2*inf_loss + alpha_CE*CE_loss(model)
-    else:
-        loss = alpha1*(pred_loss + reconstruction_loss) + lin_loss + alpha2*inf_loss
-    return loss
+    loss = alpha1*(pred_loss + reconstruction_loss) + lin_loss + alpha2*inf_loss + alpha_CE*ce_loss
+
+    return loss, pred_loss, reconstruction_loss, lin_loss, inf_loss, ce_loss
 
 def prediction_loss(x_recon,x_ahead,model):
     # Sp < T
@@ -224,3 +224,26 @@ def create_sequences(data, seq_length, stride=1):
     sequences = sequences.permute(0, 2, 1)
     
     return sequences
+
+def get_device(force_cpu=False):
+    """
+    获取计算设备 (Device)。
+    优先顺序: MPS (Mac) > CUDA (Nvidia) > CPU
+    
+    Args:
+        force_cpu (bool): 如果为 True，强制使用 cpu
+    Returns:
+        torch.device
+    """
+    if force_cpu:
+        device = torch.device("cpu")
+    elif torch.backends.mps.is_available():
+        # 检测 macOS 的 Metal Performance Shaders (M1/M2/M3 chips)
+        device = torch.device("mps")
+    elif torch.cuda.is_available():
+        # 为了代码兼容性，顺便加上 CUDA 检测
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+        
+    return device
