@@ -92,7 +92,7 @@ def CE_loss(model):
     #     loss += S_tensor[i] * (S_max - S_tensor[i])
     loss = 0
     for i in range(S_tensor.size()[0]):
-        loss -= S_tensor[i]
+        loss -= S_tensor[i] * torch.log(S_tensor[i])
     return loss
 
 def koopman_loss(x,model,Sp,T, alpha1=2, alpha2=1e-10, alpha_CE=0):
@@ -247,3 +247,31 @@ def get_device(force_cpu=False):
         device = torch.device("cpu")
         
     return device
+
+def eq_coarse_grain(model, dataloader, coarse_grain_coff, num_samples=2000):
+    model.eval()
+    device = next(model.parameters()).device
+    
+    X_input_list = []
+    macro_list = []
+    
+    count = 0
+    with torch.no_grad():
+        for batch_x in dataloader:
+            x = batch_x[0][:, 0, :].to(device) # [B, T, D]
+
+            # 1. 获取 Latent State (Encoder)
+            g = model.encoder(x)
+            macro = g.cpu().numpy() @ coarse_grain_coff
+            
+            X_input_list.append(x.cpu().numpy())
+            macro_list.append(macro)
+            
+            count += x.shape[0]
+            if count >= num_samples:
+                break
+                
+    X_data = np.concatenate(X_input_list, axis=0)[:num_samples]
+    macro_data = np.concatenate(macro_list, axis=0)[:num_samples]
+    
+    return X_data, macro_data
