@@ -92,7 +92,7 @@ def CE_loss(model):
     #     loss += S_tensor[i] * (S_max - S_tensor[i])
     loss = 0
     for i in range(S_tensor.size()[0]):
-        loss -= S_tensor[i] * torch.log(S_tensor[i])
+        loss -= S_tensor[i] #* torch.log(S_tensor[i])
     return loss
 
 def koopman_loss(x,model,Sp,T, alpha1=2, alpha2=1e-10, alpha_CE=0):
