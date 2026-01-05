@@ -333,7 +333,7 @@ def matrix_l0_norm_corrected(matrix, threshold=1e-10):
 def get_positive_contributions(sing_values):  
     ave_sig = []
     for i in range(len(sing_values)):
-        ave_sig.append(np.mean(sing_values[0:i+1]))
+        ave_sig.append(np.mean(np.log(sing_values[0:i+1])))
 
     output = []
     for id in range(len(ave_sig)-1):
