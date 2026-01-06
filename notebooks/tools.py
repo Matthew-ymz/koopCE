@@ -1,5 +1,6 @@
-import pykoop
-import sklearn
+import pysindy as ps
+from sklearn.metrics import mean_squared_error
+from tqdm import tqdm
 import math
 from typing import Union
 from sklearn.preprocessing import MaxAbsScaler, StandardScaler
@@ -489,3 +490,221 @@ def draw_fft(data: pd.DataFrame, dt: Union[str, float] = 'index',
     plt.show()
     
     return result_df
+
+def fit_sindy_sr3_robust(X, lib, feature_names,
+                         penalty='l0',       
+                         dt=1,
+                         discrete_time=True,
+                         thresholds=None,
+                         nu=1.0,
+                         max_iter=3000,
+                         tol=1e-6,
+                         test_size=0.2,
+                         metric='aic'):
+    
+    # --- 1. 针对不同范数调整默认扫描范围 ---
+    if thresholds is None:
+        if penalty == 'l0':
+            thresholds = np.logspace(-5, -1, 20)  # L0: 物理意义的系数截断值
+        elif penalty == 'l1':
+            thresholds = np.logspace(-5, -1, 20)  # L1: 物理意义的软阈值截断值
+        else:
+            thresholds = np.logspace(-2, 4, 20)   # L2: 直接是正则化权重，范围通常较大
+
+    # --- 2. 数据拆分 ---
+    split_idx = int(len(X) * (1 - test_size))
+    X_train = X[:split_idx]
+    X_test = X[split_idx:]
+
+    best_score = float('inf')
+    best_model = None
+    history = []
+
+    print(f"开始使用 {penalty.upper()} 范数扫描 {len(thresholds)} 个参数...")
+
+    for thr in tqdm(thresholds):
+        # --- 核心修改：根据范数计算 lambda ---
+        if penalty == 'l0':
+            # L0: 硬阈值换算
+            lam = ps.SR3.calculate_l0_weight(thr, nu)
+            reg_type = "l0"
+        elif penalty == 'l1':
+            # L1: 软阈值换算 (lambda = nu * threshold)
+            lam = thr * nu 
+            reg_type = "l1"
+        elif penalty == 'l2':
+            # L2: 没有截断概念，thr 直接作为 lambda
+            lam = thr
+            reg_type = "l2"
+        else:
+            raise ValueError("penalty must be 'l0', 'l1', or 'l2'")
+
+        # 配置 SR3 优化器
+        opt = ps.SR3(
+            reg_weight_lam=lam,
+            regularizer=reg_type,
+            relax_coeff_nu=nu,
+            normalize_columns=True, 
+            unbias=True,  # 对 L1 非常重要！因为 L1 会压缩系数，必须由 unbias 修正回真值
+            max_iter=max_iter,
+            tol=tol,
+        )
+
+        model = ps.SINDy(feature_library=lib, optimizer=opt, discrete_time=discrete_time)
+        model.fit(X_train, t=dt, feature_names=feature_names)
+
+        # --- 评估部分 (同前) ---
+        X_test_pred = model.predict(X_test)
+        
+        if not discrete_time:
+            mse = -model.score(X_test, t=dt) 
+        else:
+            mse = mean_squared_error(X_test[1:], X_test_pred[:-1])
+
+        coef = model.coefficients()
+        # 统计非零项：对于 L1/L2，由于浮点误差，可能不会严格为 0，需设置一个小门槛
+        k_params = np.sum(np.abs(coef) > 1e-5) 
+
+        if k_params == 0:
+            score = float('inf')
+        else:
+            n_samples = len(X_test)
+            if mse <= 0: mse = 1e-10
+            log_likelihood = n_samples * np.log(mse)
+            
+            if metric == 'aic':
+                score = log_likelihood + 2 * k_params
+            elif metric == 'bic':
+                score = log_likelihood + k_params * np.log(n_samples)
+            else: 
+                score = mse
+
+        history.append({'thr': thr, 'lam': lam, 'mse': mse, 'k': k_params, 'score': score, 'model': model})
+
+        if score < best_score:
+            best_score = score
+            best_model = model
+
+
+    # --- 结果展示 ---
+    history.sort(key=lambda x: x['score'])
+    
+    if best_model:
+        top = history[0]
+        print(f"\n最佳模型 ({metric}) | Penalty: {penalty}")
+        print(f"Param (Thr/Lam): {top['thr']:.3e}")
+        print(f"Test MSE: {top['mse']:.4e}")
+        print(f"Complexity: {top['k']}")
+        best_model.print()
+    
+    return best_model, history
+
+def lift_time_delay(X, feature_names=None, n_delays=1, delay_interval=1):
+    """
+    将时间序列 X 提升到时间延迟坐标系，并自动生成对应的新变量名。
+    
+    参数:
+    X : np.ndarray, shape (n_samples, n_dim)
+        原始状态数据。
+    feature_names : list of str, optional
+        原始变量的名字，例如 ['x', 'y', 'z']。
+        如果不提供，默认生成 ['x0', 'x1', ...]。
+    n_delays : int
+        向后看的步数 (delay count)。
+    delay_interval : int
+        延迟的间隔步长 (tau)。
+        
+    返回:
+    H : np.ndarray
+        提升后的 Hankel 矩阵。
+    new_feature_names : list of str
+        对应的变量名列表。
+        格式示例：['x', 'y', 'x_tau1', 'y_tau1', 'x_tau2', 'y_tau2']
+    """
+    n_samples, n_dim = X.shape
+    
+    # 1. 处理默认变量名
+    if feature_names is None:
+        feature_names = [f"x{i}" for i in range(n_dim)]
+    
+    if len(feature_names) != n_dim:
+        raise ValueError(f"feature_names 长度 ({len(feature_names)}) 与数据维度 ({n_dim}) 不匹配")
+
+    # 2. 计算有效样本数
+    window_size = n_delays * delay_interval
+    n_valid_samples = n_samples - window_size
+    
+    if n_valid_samples <= 0:
+        raise ValueError(f"数据太短，无法进行 {n_delays} 次延迟")
+
+    # 3. 构建数据矩阵和名字列表
+    shifted_features = []
+    new_names = []
+    
+    # --- 第0层：当前时刻 t (无后缀或标记为 t) ---
+    # 取从 window_size 到最后的点
+    shifted_features.append(X[window_size : ])
+    new_names.extend(feature_names) # 保持原名，表示 x(t)
+    
+    # --- 后续层：延迟时刻 t - k*tau ---
+    for k in range(1, n_delays + 1):
+        # 计算偏移
+        offset = window_size - k * delay_interval
+        
+        # 数据切片
+        if offset == 0:
+            shifted_data = X[: -window_size]
+        else:
+            shifted_data = X[offset : offset + n_valid_samples]
+        shifted_features.append(shifted_data)
+        
+        # 名字生成：统一添加后缀，例如 _d1 表示 delay 1, _d2 表示 delay 2
+        # 或者使用 _tau1, _tau2
+        suffix = f"_d{k}" if delay_interval == 1 else f"_d{k*delay_interval}"
+        current_names = [f"{name}{suffix}" for name in feature_names]
+        new_names.extend(current_names)
+
+    # 4. 拼接矩阵
+    H = np.column_stack(shifted_features)
+    
+    return H, new_names
+
+def plot_station(df, coarse_grain_coff, delay=0):
+    if isinstance(coarse_grain_coff, np.ndarray):
+        coff_df = pd.DataFrame(coarse_grain_coff)
+    else:
+        coff_df = coarse_grain_coff.reset_index(drop=True)
+
+    # 2. 遍历每一列进行绘图
+    for col_idx in coff_df.columns:
+        # 将当前列的数据合并到原始 df 中，命名为一个临时列名，例如 'value_to_plot'
+        df_plot = df.copy()
+        df_plot['value_to_plot'] = coff_df[col_idx].values
+        
+        # 绘制图形
+        fig = px.scatter(
+            df_plot,
+            x="lon",
+            y="lat",
+            text="station_id",
+            color="value_to_plot",  # 核心修改：颜色映射到当前列的数值
+            hover_data=["station_name", "city"],
+            color_continuous_scale='Viridis', # 设置颜色条，可选 'Plasma', 'Inferno', 'Turbo' 等
+            title=f"y{col_idx}_d{delay}"
+        )
+        
+        # 调整标注位置和点的大小
+        fig.update_traces(
+            textposition='top center',
+            marker=dict(size=10, opacity=0.8) # 稍微调大点的大小以看清颜色
+        )
+        
+        # 优化布局：保持经纬度比例，以免地图变形
+        fig.update_layout(
+            yaxis_scaleanchor="x", 
+            yaxis_scaleratio=1,
+            height=600,
+            width=800
+        )
+        
+        fig.show()
