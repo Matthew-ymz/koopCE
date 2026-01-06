@@ -509,7 +509,7 @@ def fit_sindy_sr3_robust(X, lib, feature_names,
         if penalty == 'l0':
             thresholds = np.logspace(-5, -1, 20)  # L0: 物理意义的系数截断值
         elif penalty == 'l1':
-            thresholds = np.logspace(-5, -1, 20)  # L1: 物理意义的软阈值截断值
+            thresholds = np.logspace(-5, 1, 10)  # L1: 物理意义的软阈值截断值
         else:
             thresholds = np.logspace(-2, 4, 20)   # L2: 直接是正则化权重，范围通常较大
 
