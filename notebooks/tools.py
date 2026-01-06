@@ -7,6 +7,8 @@ from sklearn.preprocessing import MaxAbsScaler, StandardScaler
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 from scipy.integrate import odeint
 import seaborn as sns
 from numpy.polynomial.legendre import Legendre
