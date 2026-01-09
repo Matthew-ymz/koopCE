@@ -14,7 +14,56 @@ from scipy.linalg import eigh
 from scipy.sparse.linalg import eigsh
 import warnings
 
+# Lorenz model
+def lorenz(t, x, sigma=10, beta=2.66667, rho=28):
+    """
+    Lorenz系统的微分方程
+    
+    参数:
+        t: 时间
+        x: 状态向量 [x, y, z]
+        sigma: 参数 (默认 10)
+        beta: 参数 (默认 2.66667)
+        rho: 参数 (默认 28)
+    
+    返回:
+        dx/dt: 状态导数
+    """
+    return [
+        sigma * (x[1] - x[0]),
+        x[0] * (rho - x[2]) - x[1],
+        x[0] * x[1] - beta * x[2],
+    ]
 
+# Nonlinear pendulum
+def npendulum(t, x):
+    """
+    nonlinear pendulum 的 Docstring
+    
+    参数
+    :param t: 时间
+    :param x: 状态向量 [x, y]
+
+    返回
+    :return dx/dt: 状态导数
+    """
+    return [
+        x[1],
+        -np.sin(x[0])
+    ]
+
+def double_osc(t, x):
+    """
+    a simple nonlinear system
+    """
+    w1 = 1.
+    w2 = 1.618
+    return [
+        - x[1] * w1,
+        x[0] * w1,
+        x[0]**2 - x[3] * w2,
+        x[2] * w2
+    ]
 
 def kuramoto_ode_cluster(theta, omega, K_matrix):
     """Kuramoto ODE with custom coupling matrix K_ij."""

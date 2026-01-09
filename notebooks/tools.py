@@ -710,3 +710,29 @@ def plot_station(df, coarse_grain_coff, delay=0):
         )
         
         fig.show()
+
+def lift_double_osc(x):
+    """
+    lift x from 4 dim to 7 dim
+    """
+    return [
+        x[0],x[1],x[2],x[3],x[0]**2,x[0]*x[1],x[1]**2
+    ]
+
+
+def lift_double_osc_dot(y):
+    """
+    lift x from 4 dim to 7 dim
+    """
+    w1 = 1.
+    w2 = 1.618
+    return [
+        - y[1] * w1,
+        y[0] * w1,
+        - y[3] * w2 + y[4],
+        y[2] * w2,
+        - 2 * y[5] * w1,
+        (y[4] - y[6]) * w1,
+        2 * w1 * y[5]
+    ]
+
