@@ -736,3 +736,93 @@ def lift_double_osc_dot(y):
         2 * w1 * y[5]
     ]
 
+def split_and_group_matrices(U, new_names, n_splits):
+    """
+    根据变量名筛选行，并将结果矩阵进行 n 等分。
+    
+    参数:
+    U : np.ndarray
+        原始大矩阵 (rows x columns)
+    new_names : list of str
+        对应 U 每一行的名字
+    n_splits : int
+        每个分类后的矩阵要被切分成几份
+        
+    返回:
+    final_list : list of np.ndarray
+        包含所有切分后小矩阵的列表
+    """
+    
+    # 1. 找到对应的行索引
+    # 使用列表推导式找到包含特定字符串的索引
+    idx_pm25 = [i for i, name in enumerate(new_names) if "pm25" in name]
+    idx_o3   = [i for i, name in enumerate(new_names) if "o3" in name]
+    
+    # 检查是否找到了数据
+    if not idx_pm25:
+        print("警告: 没有找到包含 'pm25' 的行")
+    if not idx_o3:
+        print("警告: 没有找到包含 'o3' 的行")
+        
+    # 2. 根据索引从 U 中提取子矩阵
+    # U[list_of_indices, :] 会提取对应的行
+    matrix_pm25 = U[idx_pm25, :]
+    matrix_o3   = U[idx_o3, :]
+    
+    # 3. 检查能否被 n 整除 (这是一个常见的坑)
+    # 如果不能整除，np.split 会报错，或者我们需要用 array_split
+    if matrix_pm25.shape[0] % n_splits != 0:
+        print(f"提示: PM2.5 矩阵行数 ({matrix_pm25.shape[0]}) 不能被 {n_splits} 整除，将进行近似均分。")
+    if matrix_o3.shape[0] % n_splits != 0:
+        print(f"提示: O3 矩阵行数 ({matrix_o3.shape[0]}) 不能被 {n_splits} 整除，将进行近似均分。")
+
+    # 4. 执行拆分
+    # np.array_split 比 np.split 更鲁棒，它允许不均匀拆分
+    splits_pm25 = np.array_split(matrix_pm25, n_splits, axis=0)
+    splits_o3   = np.array_split(matrix_o3,   n_splits, axis=0)
+    
+    return splits_pm25, splits_o3
+
+def plot_macro_serie(origin_data, macro_data, n_delays, delay_interval, times, selected_indices, stations):
+    fig, ax1 = plt.subplots(figsize=(15, 6))
+
+    # -------------------------------------------------
+    # 左侧 Y 轴 (ax1)：绘制各个站点的曲线
+    # -------------------------------------------------
+    ax1.set_xlabel('Time', fontsize=12)
+    ax1.set_ylabel('Concentration (Stations)', fontsize=12) # 左轴标签
+    ax1.grid(True, linestyle='--', alpha=0.5)
+    times_final = times[n_delays*delay_interval:]
+    # 循环绘制选定站点的曲线 (画在 ax1 上)
+    for idx in selected_indices:
+        station_name = stations[idx]
+        # 提取数据 (保持原有逻辑)
+        station_data = origin_data.isel(station=idx).values[n_delays*delay_interval:]
+        
+        # 注意这里使用的是 ax1.plot
+        ax1.plot(times_final, station_data, label=f'Station: {station_name}', alpha=0.7, linewidth=1)
+
+    # -------------------------------------------------
+    # 右侧 Y 轴 (ax2)：绘制最后一条宏观数据线
+    # -------------------------------------------------
+    ax2 = ax1.twinx()  # 关键步骤：创建共享X轴的第二个Y轴
+    ax2.set_ylabel('Macro Data Value', color='red', fontsize=12) # 右轴标签，设为红色以区分
+    ax2.tick_params(axis='y', labelcolor='red') # 设置右轴刻度颜色为红色
+
+    # 绘制最后一条线 (画在 ax2 上)
+    # 注意这里使用的是 ax2.plot
+    ax2.plot(times_final, macro_data, color="red", linestyle='--', alpha=0.3, label=f"y (Right Axis)")
+
+    # -------------------------------------------------
+    # 合并图例 (让两个轴的图例显示在一起)
+    # -------------------------------------------------
+    # 分别获取两个轴的图例句柄和标签
+    lines_1, labels_1 = ax1.get_legend_handles_labels()
+    lines_2, labels_2 = ax2.get_legend_handles_labels()
+    # 合并并显示
+    ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper right')
+
+    # 优化时间轴显示
+    fig.autofmt_xdate()
+
+    plt.show()

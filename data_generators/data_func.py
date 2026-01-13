@@ -1,6 +1,3 @@
-import pykoop
-import sklearn
-from sklearn.preprocessing import MaxAbsScaler, StandardScaler
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -12,6 +9,7 @@ from scipy.integrate import fixed_quad
 from scipy.linalg import eig
 from scipy.linalg import eigh
 from scipy.sparse.linalg import eigsh
+<<<<<<< HEAD:notebooks/data_func.py
 import warnings
 import matplotlib as mpl
 
@@ -24,6 +22,8 @@ from sklearn.exceptions import ConvergenceWarning
 from mpl_toolkits.mplot3d import Axes3D
 from ipywidgets import interact, fixed
 import ipywidgets as widgets
+=======
+>>>>>>> 5bebcf5 (ymz air delay24 and change frame):data_generators/data_func.py
 
 # Lorenz model
 def lorenz(t, x, sigma=10, beta=2.66667, rho=28):
