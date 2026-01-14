@@ -1,0 +1,3 @@
+Complexity,Loss,Equation
+1,0.036634695,"-0.056620225"
+7,0.011804799,"square(x1) - square(x1 + -0.08713217)"

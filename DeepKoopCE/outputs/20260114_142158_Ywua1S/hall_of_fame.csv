@@ -1,0 +1,6 @@
+Complexity,Loss,Equation
+1,2.0514766e-5,"-0.00015452939"
+5,2.051476e-5,"x1 + (-0.00015347327 - x1)"
+7,1.9762061e-5,"-0.00012040385 - square(square(square(square(x0))))"
+9,1.9529778e-5,"sqrt(sqrt(x1 - ((x1 + x0) - x0)))"
+11,1.82353e-5,"sqrt(sqrt(sqrt(square(((x1 + x0) - x1) - x0))))"

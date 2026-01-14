@@ -95,29 +95,29 @@ def CE_loss(model):
         loss -= S_tensor[i] #* torch.log(S_tensor[i])
     return loss
 
-def koopman_loss(x,model,Sp,T, alpha1=2, alpha2=1e-10, alpha_CE=0):
-    # Sp < T
-    MAX_T = max(Sp,T)
+def koopman_loss(x,model,Sp, alpha1=2, alpha2=1e-10, alpha3=1e-5, alpha_CE=0):
 
     encoder_x = model.embed(x)
     recover_x = model.recover(encoder_x)
 
 
-    koopman_stepped = model.koopman_operator(encoder_x[:,[0],:],MAX_T)
+    koopman_stepped = model.koopman_operator(encoder_x[:,[0],:], Sp)
     recover_koopman = model.recover(koopman_stepped[:,:(Sp-1),:])
 
 
     reconstruction_inf_loss = torch.norm(x-recover_x,p=float('inf'),dim=[-2,-1]).mean()
     prediction_inf_loss = torch.norm(x[:,1:Sp,:]-recover_koopman,p=float('inf'),dim=[-2,-1]).mean()
+    l1_reg = 0  
+    for param in model.koopman.parameters():  
+        l1_reg += torch.norm(param, p=1) 
 
-
-    lin_loss = F.mse_loss(encoder_x[:,1:T,:],koopman_stepped[:,:(T-1),:])
+    lin_loss = F.mse_loss(encoder_x[:, 1:Sp, :], koopman_stepped[:, :(Sp-1), :])
     pred_loss = F.mse_loss(recover_koopman,x[:,1:Sp,:],)
     reconstruction_loss = F.mse_loss(recover_x,x)
     inf_loss = reconstruction_inf_loss + prediction_inf_loss
     ce_loss = CE_loss(model)
 
-    loss = alpha1*(pred_loss + reconstruction_loss) + lin_loss + alpha2*inf_loss + alpha_CE*ce_loss
+    loss = alpha1*(pred_loss + reconstruction_loss) + lin_loss + alpha2*inf_loss + alpha3*l1_reg + alpha_CE*ce_loss
 
     return loss, pred_loss, reconstruction_loss, lin_loss, inf_loss, ce_loss
 
