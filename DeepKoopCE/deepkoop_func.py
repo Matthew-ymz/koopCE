@@ -83,19 +83,23 @@ class Lusch(nn.Module):
     def _unnormalize(self, x):
         return self.std[(None,)*(x.dim()-1)+(...,)]*x + self.mu[(None,)*(x.dim()-1)+(...,)]
     
-def CE_loss(model):
+def CE_loss(model, type):
     K_tensor = model.koopman.linear_evolution.weight
     _, S_tensor, _ = torch.linalg.svd(K_tensor, full_matrices=False)
+    loss = 0
+    if type=='type1':
+        for i in range(S_tensor.size()[0]):
+            loss -= S_tensor[i]
+    elif type=='type2':
+        for i in range(S_tensor.size()[0]):
+            loss -= S_tensor[i] * torch.log(S_tensor[i])
     # S_max = S_tensor.max()
     # loss = 0
     # for i in range(S_tensor.size()[0]):
     #     loss += S_tensor[i] * (S_max - S_tensor[i])
-    loss = 0
-    for i in range(S_tensor.size()[0]):
-        loss -= S_tensor[i] #* torch.log(S_tensor[i])
     return loss
 
-def koopman_loss(x,model,Sp, alpha1=2, alpha2=1e-10, alpha3=1e-5, alpha_CE=0):
+def koopman_loss(x,model,Sp, alpha1=2, alpha2=1e-10, alpha3=1e-5, alpha_CE=0, type='type1'):
 
     encoder_x = model.embed(x)
     recover_x = model.recover(encoder_x)
@@ -115,7 +119,7 @@ def koopman_loss(x,model,Sp, alpha1=2, alpha2=1e-10, alpha3=1e-5, alpha_CE=0):
     pred_loss = F.mse_loss(recover_koopman,x[:,1:Sp,:],)
     reconstruction_loss = F.mse_loss(recover_x,x)
     inf_loss = reconstruction_inf_loss + prediction_inf_loss
-    ce_loss = CE_loss(model)
+    ce_loss = CE_loss(model, type=type)
 
     loss = alpha1*(pred_loss + reconstruction_loss) + lin_loss + alpha2*inf_loss + alpha3*l1_reg + alpha_CE*ce_loss
 

@@ -1,7 +1,0 @@
-Complexity,Loss,Equation
-1,0.0005782189,"0.0011270121"
-3,0.0005731023,"0.0010741879 - x0"
-4,0.0005073019,"square(square(square(x1)))"
-5,0.00031906104,"square(square(square(square(x1))))"
-6,0.0002568962,"square(square(square(x1 + 0.06467417)))"
-7,5.6898523e-5,"square(x1) - square(x1 + 0.080903605)"
