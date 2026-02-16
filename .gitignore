@@ -96,6 +96,7 @@ cmake-build-*/
 
 # File-based project format
 *.iws
+*.mat
 
 # IntelliJ
 out/
@@ -349,3 +350,4 @@ $RECYCLE.BIN/
 
 # dataset
 *.nc
+*.csv
