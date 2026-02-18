@@ -351,3 +351,5 @@ $RECYCLE.BIN/
 # dataset
 *.nc
 *.csv
+*.npy
+*.pkl

@@ -247,24 +247,16 @@ def prepare_sequences(
     data_list: List[np.ndarray],
     stage_num: int
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    为特定阶段准备输入-目标序列对
-    
-    Args:
-        data_list: 数据列表
-        stage_num: 阶段编号
-        
-    Returns:
-        input_data: 输入序列 (shape: [total_timesteps-1, features])
-        target_data: 目标序列 (shape: [total_timesteps-1, features])
-    """
+
     inputs = []
     targets = []
-    
+    seq_list = []
+
     for data in data_list:
         # 提取阶段数据
         stage_data = extract_stage_data(data, stage_num)
-        
+        seq_list.append(stage_data)
+
         # 创建序列对 (t -> t+1)
         inputs.append(stage_data[:-1])    # 除了最后一个时间步
         targets.append(stage_data[1:])    # 除了第一个时间步
@@ -273,10 +265,11 @@ def prepare_sequences(
     input_data = np.concatenate(inputs, axis=0)
     target_data = np.concatenate(targets, axis=0)
     
-    return input_data, target_data
+    return  seq_list, input_data, target_data
 
 
 def save_data(
+    seq_list: list,
     input_data: np.ndarray,
     target_data: np.ndarray,
     stage_num: int,
@@ -296,10 +289,12 @@ def save_data(
     os.makedirs(stage_dir, exist_ok=True)
     
     # 准备文件路径
+    seqs_path = os.path.join(stage_dir, f'{split_type}_seqs')
     input_path = os.path.join(stage_dir, f'{split_type}_input.csv')
     target_path = os.path.join(stage_dir, f'{split_type}_target.csv')
     
     # 保存数据
+    np.save(seqs_path, seq_list)
     pd.DataFrame(input_data).to_csv(input_path, header=False, index=False)
     pd.DataFrame(target_data).to_csv(target_path, header=False, index=False)
     
@@ -333,14 +328,14 @@ def process_all_stages(
         # 处理训练集
         if Config.VERBOSE:
             print(f"\n训练集:")
-        train_input, train_target = prepare_sequences(train_data, stage_num)
-        save_data(train_input, train_target, stage_num, 'train')
+        seq_list, train_input, train_target = prepare_sequences(train_data, stage_num)
+        save_data(seq_list, train_input, train_target, stage_num, 'train')
         
         # 处理测试集
         if Config.VERBOSE:
             print(f"\n测试集:")
-        test_input, test_target = prepare_sequences(test_data, stage_num)
-        save_data(test_input, test_target, stage_num, 'test')
+        seq_list, test_input, test_target = prepare_sequences(test_data, stage_num)
+        save_data(seq_list, test_input, test_target, stage_num, 'test')
 
 
 # =============================================================================
@@ -383,12 +378,15 @@ def format_timeseries_data(
 # 主函数
 # =============================================================================
 
-def main():
+def main(atten_type = 1, trial_type = 1):
     """主处理流程"""
     print("="*60)
     print("EEG 数据处理流程")
     print("="*60)
-    
+
+    Config.ATTEN_TYPE_FILTER = atten_type
+    Config.TRIAL_TYPE_FILTER = trial_type
+
     try:
         # 1. 加载原始数据
         bv_group, trial_types, atten_types, time1 = load_raw_data(Config.INPUT_FILE)
@@ -420,6 +418,7 @@ def main():
     except Exception as e:
         print(f"\n✗ 处理失败: {e}")
         raise
+
 
 
 if __name__ == "__main__":

@@ -503,8 +503,86 @@ def fit_sindy_sr3_robust(X, lib, feature_names,
                          tol=1e-6,
                          test_size=0.2,
                          metric='aic'):
+    """
+    使用 SR3 优化器拟合 SINDy 模型，支持鲁棒的参数扫描。
+    支持单个时间序列或多段时间序列列表（直接对每个序列单独拟合，不进行拼接）。
     
-    # --- 1. 针对不同范数调整默认扫描范围 ---
+    参数:
+    X : np.ndarray 或 list of np.ndarray
+        - 如果是 np.ndarray，shape (n_samples, n_dim)：单个时间序列
+        - 如果是 list，每个元素是 np.ndarray (n_samples_i, n_dim)：多段时间序列
+          会对每个序列单独拟合，不进行拼接
+    lib : pysindy.feature_library
+        特征库对象
+    feature_names : list of str
+        特征名列表
+    penalty : str
+        正则化类型：'l0', 'l1', 'l2'
+    dt : float
+        时间步长
+    discrete_time : bool
+        是否使用离散时间
+    thresholds : list or np.ndarray, optional
+        参数扫描范围
+    nu : float
+        SR3 的松弛参数
+    max_iter : int
+        最大迭代次数
+    tol : float
+        收敛阈值
+    test_size : float
+        测试集比例
+    metric : str
+        评估指标：'aic', 'bic', 'mse'
+        
+    返回:
+    best_model : pysindy.SINDy
+        最佳模型（基于所有序列的平均评分）
+    history : list of dict
+        参数扫描的历史记录，每个字典包含所有序列的结果
+        格式: {
+            'thr': threshold,
+            'lam': lambda,
+            'avg_score': 平均评分,
+            'avg_mse': 平均MSE,
+            'avg_k': 平均复杂度,
+            'sequence_results': [{...}, {...}, ...],  # 每个序列的结果
+            'model': model
+        }
+    """
+    # === 第一步：检查并转换输入 ===
+    if isinstance(X, list):
+        # 如果是列表，验证一致性
+        if len(X) == 0:
+            raise ValueError("输入列表不能为空")
+        
+        # 验证所有序列的维度一致
+        n_dim = X[0].shape[1] if X[0].ndim == 2 else 1
+        for i, seq in enumerate(X):
+            if seq.ndim != 2:
+                raise ValueError(f"序列 {i} 应为2维数组 (n_samples, n_dim)，实际为 {seq.ndim} 维")
+            if seq.shape[1] != n_dim:
+                raise ValueError(f"序列 {i} 的维度 ({seq.shape[1]}) 与第一个序列 ({n_dim}) 不匹配")
+        
+        X_list = X
+        n_sequences = len(X)
+        
+        print(f"✓ 检测到 {n_sequences} 个时间序列（单独拟合，不拼接）")
+        for i, seq in enumerate(X_list):
+            print(f"  序列 {i+1}: {seq.shape[0]} 个样本, {seq.shape[1]} 个维度")
+        
+    elif isinstance(X, np.ndarray):
+        # 如果是单个数组
+        if X.ndim != 2:
+            raise ValueError(f"数组应为2维 (n_samples, n_dim)，实际为 {X.ndim} 维")
+        X_list = [X]
+        n_sequences = 1
+        print(f"✓ 检测到单个时间序列，长度: {X.shape[0]}")
+        
+    else:
+        raise TypeError(f"输入类型应为 np.ndarray 或 list，实际为 {type(X)}")
+
+    # === 第二步：针对不同范数调整默认扫描范围 ===
     if thresholds is None:
         if penalty == 'l0':
             thresholds = np.logspace(-5, -1, 20)  # L0: 物理意义的系数截断值
@@ -513,90 +591,120 @@ def fit_sindy_sr3_robust(X, lib, feature_names,
         else:
             thresholds = np.logspace(-2, 4, 20)   # L2: 直接是正则化权重，范围通常较大
 
-    # --- 2. 数据拆分 ---
-    split_idx = int(len(X) * (1 - test_size))
-    X_train = X[:split_idx]
-    X_test = X[split_idx:]
-
     best_score = float('inf')
     best_model = None
     history = []
 
-    print(f"开始使用 {penalty.upper()} 范数扫描 {len(thresholds)} 个参数...")
+    print(f"\n开始使用 {penalty.upper()} 范数扫描 {len(thresholds)} 个参数...")
+    print(f"对 {n_sequences} 个序列分别拟合...\n")
 
-    for thr in tqdm(thresholds):
-        # --- 核心修改：根据范数计算 lambda ---
-        if penalty == 'l0':
-            # L0: 硬阈值换算
-            lam = ps.SR3.calculate_l0_weight(thr, nu)
-            reg_type = "l0"
-        elif penalty == 'l1':
-            # L1: 软阈值换算 (lambda = nu * threshold)
-            lam = thr * nu 
-            reg_type = "l1"
-        elif penalty == 'l2':
-            # L2: 没有截断概念，thr 直接作为 lambda
-            lam = thr
-            reg_type = "l2"
-        else:
-            raise ValueError("penalty must be 'l0', 'l1', or 'l2'")
+    for thr in tqdm(thresholds, desc=f"参数扫描 ({penalty})"):
+        try:
+            # --- 核心修改：根据范数计算 lambda ---
+            if penalty == 'l0':
+                # L0: 硬阈值换算
+                lam = ps.SR3.calculate_l0_weight(thr, nu)
+                reg_type = "l0"
+            elif penalty == 'l1':
+                # L1: 软阈值换算 (lambda = nu * threshold)
+                lam = thr * nu 
+                reg_type = "l1"
+            elif penalty == 'l2':
+                # L2: 没有截断概念，thr 直接作为 lambda
+                lam = thr
+                reg_type = "l2"
+            else:
+                raise ValueError("penalty must be 'l0', 'l1', or 'l2'")
 
-        # 配置 SR3 优化器
-        opt = ps.SR3(
-            reg_weight_lam=lam,
-            regularizer=reg_type,
-            relax_coeff_nu=nu,
-            normalize_columns=True, 
-            unbias=True,  # 对 L1 非常重要！因为 L1 会压缩系数，必须由 unbias 修正回真值
-            max_iter=max_iter,
-            tol=tol,
-        )
+            # 配置 SR3 优化器
+            opt = ps.SR3(
+                reg_weight_lam=lam,
+                regularizer=reg_type,
+                relax_coeff_nu=nu,
+                normalize_columns=True, 
+                unbias=True,  # 对 L1 非常重要！
+                max_iter=max_iter,
+                tol=tol,
+            )
 
-        model = ps.SINDy(feature_library=lib, optimizer=opt, discrete_time=discrete_time)
-        model.fit(X_train, t=dt, feature_names=feature_names)
+            model = ps.SINDy(feature_library=lib, optimizer=opt, discrete_time=discrete_time)           
 
-        # --- 评估部分 (同前) ---
-        X_test_pred = model.predict(X_test)
-        
-        if not discrete_time:
-            mse = -model.score(X_test, t=dt) 
-        else:
-            mse = mean_squared_error(X_test[1:], X_test_pred[:-1])
-
-        coef = model.coefficients()
-        # 统计非零项：对于 L1/L2，由于浮点误差，可能不会严格为 0，需设置一个小门槛
-        k_params = np.sum(np.abs(coef) > 1e-5) 
-
-        if k_params == 0:
-            score = float('inf')
-        else:
-            n_samples = len(X_test)
-            if mse <= 0: mse = 1e-10
-            log_likelihood = n_samples * np.log(mse)
+            # 拆分训练测试集
+            split_idx = -2
+            X_train = X_list[:split_idx]
+            X_test = X_list[split_idx:]           
             
-            if metric == 'aic':
-                score = log_likelihood + 2 * k_params
-            elif metric == 'bic':
-                score = log_likelihood + k_params * np.log(n_samples)
-            else: 
-                score = mse
+            # 拟合当前序列
+            model.fit(X_train, t=dt, feature_names=feature_names)
+            
+            # 评估当前序列
+            X_test_pred = model.predict(X_test)
+            
+            X_test_pred = np.vstack(X_test_pred)
+            X_test = np.vstack(X_test)
+            
+            if not discrete_time:
+                mse = -model.score(X_test, t=dt) 
+            else:
+                # 确保维度匹配
+                if X_test_pred.shape[0] > X_test.shape[0] - 1:
+                    mse = mean_squared_error(X_test[1:], X_test_pred[:len(X_test)-1])
+                else:
+                    mse = mean_squared_error(X_test[1:len(X_test_pred)+1], X_test_pred)
 
-        history.append({'thr': thr, 'lam': lam, 'mse': mse, 'k': k_params, 'score': score, 'model': model})
+            coef = model.coefficients()
+            k_params = np.sum(np.abs(coef) > 1e-5)
 
-        if score < best_score:
-            best_score = score
-            best_model = model
+            if k_params == 0:
+                score = float('inf')
+            else:
+                n_samples = len(X_test)
+                if mse <= 0: 
+                    mse = 1e-10
+                log_likelihood = n_samples * np.log(mse)
+                
+                if metric == 'aic':
+                    score = log_likelihood + 2 * k_params
+                elif metric == 'bic':
+                    score = log_likelihood + k_params * np.log(n_samples)
+                else: 
+                    score = mse
+            
+            history.append({
+                'thr': thr, 
+                'lam': lam, 
+                'score': score,
+                'mse': mse,
+                'k': k_params,
+                'model': model
+            })
 
+            if score < best_score:
+                best_score = score
+                best_model = model
+                    
+        except Exception as e:
+            print(f"⚠️  参数 thr={thr:.3e} 处理失败: {str(e)}")
+            continue
 
-    # --- 结果展示 ---
+    # === 结果展示 ===
+    if len(history) == 0:
+        raise RuntimeError("所有参数配置都拟合失败，请检查输入数据和参数")
+    
     history.sort(key=lambda x: x['score'])
     
     if best_model:
         top = history[0]
-        print(f"\n最佳模型 ({metric}) | Penalty: {penalty}")
-        print(f"Param (Thr/Lam): {top['thr']:.3e}")
-        print(f"Test MSE: {top['mse']:.4e}")
-        print(f"Complexity: {top['k']}")
+        print(f"\n" + "="*70)
+        print(f"最佳模型 ({metric.upper()}) | Penalty: {penalty.upper()}")
+        print(f"="*70)
+        print(f"参数 (Threshold): {top['thr']:.3e}")
+        print(f"参数 (Lambda):    {top['lam']:.3e}")
+        print(f"MSE:         {top['mse']:.4e}")
+        print(f"k:   {top['k']:.1f}")
+        print(f"评分 ({metric}):  {top['score']:.4f}")
+        print(f"\n发现的方程:")
+        print("="*70)
         best_model.print()
     
     return best_model, history
@@ -604,10 +712,13 @@ def fit_sindy_sr3_robust(X, lib, feature_names,
 def lift_time_delay(X, feature_names=None, n_delays=1, delay_interval=1):
     """
     将时间序列 X 提升到时间延迟坐标系，并自动生成对应的新变量名。
+    支持单个时间序列或多段时间序列列表。
     
     参数:
-    X : np.ndarray, shape (n_samples, n_dim)
-        原始状态数据。
+    X : np.ndarray 或 list of np.ndarray
+        - 如果是 np.ndarray，shape (n_samples, n_dim)：单个时间序列
+        - 如果是 list，每个元素是 np.ndarray (n_samples_i, n_dim)：多段时间序列
+          所有序列必须有相同的 n_dim（维度）
     feature_names : list of str, optional
         原始变量的名字，例如 ['x', 'y', 'z']。
         如果不提供，默认生成 ['x0', 'x1', ...]。
@@ -618,58 +729,156 @@ def lift_time_delay(X, feature_names=None, n_delays=1, delay_interval=1):
         
     返回:
     H : np.ndarray
-        提升后的 Hankel 矩阵。
+        提升后的 Hankel 矩阵（多个序列拼接）。
     new_feature_names : list of str
         对应的变量名列表。
-        格式示例：['x', 'y', 'x_tau1', 'y_tau1', 'x_tau2', 'y_tau2']
+        格式示例：['x', 'y', 'x_d1', 'y_d1', 'x_d2', 'y_d2']
     """
-    n_samples, n_dim = X.shape
     
-    # 1. 处理默认变量名
+    # 1. 检查输入类型并统一转换
+    if isinstance(X, list):
+        # 如果是列表，检查所有序列
+        if len(X) == 0:
+            raise ValueError("输入列表不能为空")
+        
+        # 验证所有序列的维度一致
+        n_dim = X[0].shape[1] if X[0].ndim == 2 else 1
+        for i, seq in enumerate(X):
+            if seq.ndim != 2:
+                raise ValueError(f"序列 {i} 应为2维数组 (n_samples, n_dim)，实际为 {seq.ndim} 维")
+            if seq.shape[1] != n_dim:
+                raise ValueError(f"序列 {i} 的维度 ({seq.shape[1]}) 与第一个序列 ({n_dim}) 不匹配")
+        
+        # 转换为 list of arrays
+        X_list = X
+    
+    elif isinstance(X, np.ndarray):
+        X_list = [X]
+        n_dim = X.shape[1]
+    
+    else:
+        raise TypeError(f"输入类型应为 np.ndarray 或 list，实际为 {type(X)}")
+
+    n_dim = X_list[0].shape[1]
+    
+    # 2. 处理默认变量名
     if feature_names is None:
         feature_names = [f"x{i}" for i in range(n_dim)]
     
     if len(feature_names) != n_dim:
         raise ValueError(f"feature_names 长度 ({len(feature_names)}) 与数据维度 ({n_dim}) 不匹配")
 
-    # 2. 计算有效样本数
-    window_size = n_delays * delay_interval
-    n_valid_samples = n_samples - window_size
-    
-    if n_valid_samples <= 0:
-        raise ValueError(f"数据太短，无法进行 {n_delays} 次延迟")
-
-    # 3. 构建数据矩阵和名字列表
-    shifted_features = []
+    # 3. 生成新的特征名（所有序列共用）
     new_names = []
     
-    # --- 第0层：当前时刻 t (无后缀或标记为 t) ---
-    # 取从 window_size 到最后的点
-    shifted_features.append(X[window_size : ])
-    new_names.extend(feature_names) # 保持原名，表示 x(t)
+    # 第0层：当前时刻 t
+    new_names.extend(feature_names)
     
-    # --- 后续层：延迟时刻 t - k*tau ---
+    # 后续层：延迟时刻 t - k*tau
     for k in range(1, n_delays + 1):
-        # 计算偏移
-        offset = window_size - k * delay_interval
-        
-        # 数据切片
-        if offset == 0:
-            shifted_data = X[: -window_size]
-        else:
-            shifted_data = X[offset : offset + n_valid_samples]
-        shifted_features.append(shifted_data)
-        
-        # 名字生成：统一添加后缀，例如 _d1 表示 delay 1, _d2 表示 delay 2
-        # 或者使用 _tau1, _tau2
         suffix = f"_d{k}" if delay_interval == 1 else f"_d{k*delay_interval}"
         current_names = [f"{name}{suffix}" for name in feature_names]
         new_names.extend(current_names)
 
-    # 4. 拼接矩阵
-    H = np.column_stack(shifted_features)
+    # 4. 处理每个序列并拼接
+    all_H = []
     
-    return H, new_names
+    for seq_idx, X_single in enumerate(X_list):
+        n_samples, _ = X_single.shape
+        
+        # 计算有效样本数
+        window_size = n_delays * delay_interval
+        n_valid_samples = n_samples - window_size
+        
+        if n_valid_samples <= 0:
+            print(f"⚠️ 警告：序列 {seq_idx} 太短 (长度 {n_samples})，无法进行 {n_delays} 次延迟"
+                  f"(需要最少 {window_size + 1} 个样本)，跳过此序列")
+            continue
+        
+        # 构建该序列的数据矩阵
+        shifted_features = []
+        
+        # 第0层：当前时刻 t (无后缀或标记为 t)
+        shifted_features.append(X_single[window_size:])
+        
+        # 后续层：延迟时刻 t - k*tau
+        for k in range(1, n_delays + 1):
+            # 计算偏移
+            offset = window_size - k * delay_interval
+            
+            # 数据切片
+            if offset == 0:
+                shifted_data = X_single[:-window_size]
+            else:
+                shifted_data = X_single[offset:offset + n_valid_samples]
+            
+            shifted_features.append(shifted_data)
+        
+        # 拼接该序列的矩阵
+        H_single = np.column_stack(shifted_features)
+        all_H.append(H_single)
+    
+    # 5. 检查是否有有效的序列被处理
+    if len(all_H) == 0:
+        raise ValueError("所有输入序列都太短，无法进行时间延迟提升")
+    
+    # 6. 拼接所有序列（按行拼接）
+    H = np.vstack(all_H)
+    
+    print(f"✓ 成功处理 {len(all_H)} 个序列，提升后数据形状: {H.shape}")
+    
+    return all_H, new_names
+
+'''
+
+
+
+def fit_sindy_sr3_robust(
+    x_data: np.ndarray,
+    library,
+    feature_names: List[str],
+    penalty: str = 'l1',
+    discrete_time: bool = True,
+    max_iter: int = 100,
+    thresholds: np.ndarray = None,
+    metric: str = 'bic',
+    tol: float = 1e-4,
+    nu: float = 1
+) -> Tuple:
+    """
+    使用 SR3 + STLSQ 拟合 SINDy 模型
+    
+    Args:
+        x_data: 输入数据，形状为 (n_samples, n_features)
+        library: pysindy 库对象
+        feature_names: 特征名称
+        penalty: 正则化类型 ('l1' 或 'l2')
+        discrete_time: 是否为离散时间系统
+        max_iter: 最大迭代次数
+        thresholds: 阈值数组
+        metric: 模型选择指标
+        tol: 容差
+        nu: SR3 参数
+        
+    Returns:
+        model: 拟合的 SINDy 模型
+        results: 结果字典
+    """
+    import pysindy as ps
+    
+    if thresholds is None:
+        thresholds = np.array([0.01, 0.1, 1.0])
+    
+    # 使用 STLSQ 优化器
+    optimizer = ps.STLSQ(threshold=thresholds[0], alpha=0.9)
+    
+    # 拟合模型
+    model = ps.SINDy(feature_library=library, optimizer=optimizer, discrete_time=discrete_time)
+    model.fit(x_data, feature_names=feature_names)
+    
+    results = {'score': model.score(x_data)}
+    return model, results
+'''
 
 def plot_station(df, coarse_grain_coff, delay=0):
     if isinstance(coarse_grain_coff, np.ndarray):
