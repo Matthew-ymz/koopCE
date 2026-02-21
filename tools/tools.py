@@ -642,7 +642,7 @@ def fit_sindy_sr3_robust(X, lib, feature_names,
             
             X_test_pred = np.vstack(X_test_pred)
             X_test = np.vstack(X_test)
-            
+
             if not discrete_time:
                 mse = -model.score(X_test, t=dt) 
             else:
@@ -1035,3 +1035,87 @@ def plot_macro_serie(origin_data, macro_data, n_delays, delay_interval, times, s
     fig.autofmt_xdate()
 
     plt.show()
+
+from typing import Callable, List, Tuple
+
+def compute_gram_matrix_for_sindy(library, sample_points_list, weights=None):
+    """
+    专门为 PySINDy Library 对象优化的 Gram 矩阵计算函数
+    
+    参数：
+    -----------
+    library : ConcatLibrary 或其他 SINDy Library 对象
+        观测函数库
+    sample_points : np.ndarray
+        采样点数据，形状为 (M, state_dim)
+    weights : np.ndarray, optional
+        权重，形状为 (M,)
+    """
+    
+    all_samples = []
+    trajectory_lengths = []
+    
+    for traj in sample_points_list:
+        if isinstance(traj, np.ndarray):
+            all_samples.append(traj)
+            trajectory_lengths.append(traj.shape[0])
+        else:
+            raise TypeError(f"每个时间序列应该是 np.ndarray，得到 {type(traj)}")
+    
+    # 合并所有样本点
+    X_all = np.vstack(all_samples)  # 形状 (总样本数 M, 状态维数 state_dim)
+    M = X_all.shape[0]  # 总样本数
+    num_trajectories = len(sample_points_list)
+    
+    print(f"检测到 {num_trajectories} 条轨迹")
+    print(f"各轨迹时间步数: {trajectory_lengths}")
+    print(f"总样本数 M = {M}")
+    
+    # ========== 步骤2：使用 library 计算观测函数值 ==========
+    Phi = library.transform(X_all)  # 形状 (M, N)
+    M_check, N = Phi.shape
+    
+    print(f"观测函数个数 N = {N}")
+    assert M_check == M, f"样本数不匹配: {M_check} != {M}"
+    
+    # ========== 步骤3：处理权重 ==========
+    if weights is None or weights == "uniform":
+        # 所有样本点等权重
+        w = np.ones(M) / M
+        print("使用均匀权重（所有样本等权重）")
+        
+    elif weights == "traj":
+        # 按轨迹等权重：每条轨迹的权重和为 1/num_trajectories
+        w = np.zeros(M)
+        idx = 0
+        for traj_len in trajectory_lengths:
+            # 该条轨迹内部的点等权重
+            w[idx : idx + traj_len] = 1.0 / (num_trajectories * traj_len)
+            idx += traj_len
+        print(f"使用轨迹等权重（每条轨迹权重和 = {1/num_trajectories:.4f}）")
+        
+    elif isinstance(weights, np.ndarray):
+        # 自定义权重
+        if len(weights) != M:
+            raise ValueError(f"权重长度 {len(weights)} 与总样本数 {M} 不匹配")
+        w = weights / np.sum(weights)  # 归一化
+        print("使用自定义权重")
+        
+    else:
+        raise ValueError(f"不支持的权重类型: {type(weights)}")
+    
+    # ========== 步骤4：计算 Gram 矩阵 ==========
+    # G_ij = (1/M) * Σ Phi[m, i] * conj(Phi[m, j]) 加权版本
+    # 矩阵形式：G = Phi.T @ diag(w) @ Phi
+    
+    # 高效的向量化计算
+    Phi_weighted = Phi * w[:, np.newaxis]  # 形状 (M, N)，每行乘以对应的权重
+    G = Phi_weighted.T @ Phi  # 形状 (N, N)
+    
+    # 如果都是实数，返回实矩阵
+    if np.allclose(G.imag, 0):
+        G = G.real
+    
+    print(f"Gram 矩阵形状: {G.shape}")
+        
+    return G
