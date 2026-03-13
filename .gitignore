@@ -353,3 +353,4 @@ $RECYCLE.BIN/
 *.csv
 *.npy
 *.pkl
+*.pdf

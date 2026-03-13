@@ -1,0 +1,1 @@
+This matrix compares the strongest six summary metrics without using a chart title. KoopCE leads the primary metric Accuracy at 0.9. Cell colors show metric-wise standardized standing after orienting lower-is-better metrics so that warmer cells indicate stronger overall performance, while annotations preserve original values and per-metric ranks.

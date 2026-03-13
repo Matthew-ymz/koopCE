@@ -1,0 +1,1 @@
+This scatter plot exposes the efficiency frontier between Latency Ms and Accuracy. The Pareto set is Baseline-Y, Baseline-X, Ablation-B, Ablation-A, KoopCE. Bubble area encodes Params M, adding model-size context without a title.

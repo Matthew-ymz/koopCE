@@ -1,0 +1,1 @@
+This heatmap compares Accuracy across datasets or operating regimes. KoopCE wins the largest number of dataset slices (4 out of 4). The panel is useful for spotting robustness gaps that an aggregate mean can hide.

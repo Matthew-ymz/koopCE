@@ -1,0 +1,1 @@
+This multi-panel curve summary shows convergence dynamics for up to four logged metrics. For the first panel, Baseline-Y ends with the strongest final Train Loss. Confidence bands summarize variation across runs.

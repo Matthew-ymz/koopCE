@@ -1,0 +1,1 @@
+This figure focuses on Accuracy and preserves run-to-run spread across methods. KoopCE remains the strongest method on the central tendency of the primary metric. The overlay makes stability visible instead of showing only a single point estimate.

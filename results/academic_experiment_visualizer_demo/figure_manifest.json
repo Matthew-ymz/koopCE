@@ -1,0 +1,32 @@
+[
+  {
+    "stem": "metric_heatmap",
+    "png": "/Users/yangmingzhe/Desktop/code/github/koopCE/results/academic_experiment_visualizer_demo/metric_heatmap.png",
+    "pdf": "/Users/yangmingzhe/Desktop/code/github/koopCE/results/academic_experiment_visualizer_demo/metric_heatmap.pdf",
+    "caption": "/Users/yangmingzhe/Desktop/code/github/koopCE/results/academic_experiment_visualizer_demo/metric_heatmap.md"
+  },
+  {
+    "stem": "performance_tradeoff",
+    "png": "/Users/yangmingzhe/Desktop/code/github/koopCE/results/academic_experiment_visualizer_demo/performance_tradeoff.png",
+    "pdf": "/Users/yangmingzhe/Desktop/code/github/koopCE/results/academic_experiment_visualizer_demo/performance_tradeoff.pdf",
+    "caption": "/Users/yangmingzhe/Desktop/code/github/koopCE/results/academic_experiment_visualizer_demo/performance_tradeoff.md"
+  },
+  {
+    "stem": "metric_distribution",
+    "png": "/Users/yangmingzhe/Desktop/code/github/koopCE/results/academic_experiment_visualizer_demo/metric_distribution.png",
+    "pdf": "/Users/yangmingzhe/Desktop/code/github/koopCE/results/academic_experiment_visualizer_demo/metric_distribution.pdf",
+    "caption": "/Users/yangmingzhe/Desktop/code/github/koopCE/results/academic_experiment_visualizer_demo/metric_distribution.md"
+  },
+  {
+    "stem": "dataset_heatmap",
+    "png": "/Users/yangmingzhe/Desktop/code/github/koopCE/results/academic_experiment_visualizer_demo/dataset_heatmap.png",
+    "pdf": "/Users/yangmingzhe/Desktop/code/github/koopCE/results/academic_experiment_visualizer_demo/dataset_heatmap.pdf",
+    "caption": "/Users/yangmingzhe/Desktop/code/github/koopCE/results/academic_experiment_visualizer_demo/dataset_heatmap.md"
+  },
+  {
+    "stem": "training_curves",
+    "png": "/Users/yangmingzhe/Desktop/code/github/koopCE/results/academic_experiment_visualizer_demo/training_curves.png",
+    "pdf": "/Users/yangmingzhe/Desktop/code/github/koopCE/results/academic_experiment_visualizer_demo/training_curves.pdf",
+    "caption": "/Users/yangmingzhe/Desktop/code/github/koopCE/results/academic_experiment_visualizer_demo/training_curves.md"
+  }
+]

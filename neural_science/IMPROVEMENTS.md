@@ -100,7 +100,7 @@ test_input.shape   # ❌ 最后循环的 test_input 是什么？
 #### 5. ❌ **缺少错误处理**
 
 ```python
-with h5py.File('./IPCAS_ExemplarData_ZXL_Sub14.mat', 'r') as f: 
+with h5py.File('./data/IPCAS_ExemplarData_ZXL_Sub14.mat', 'r') as f: 
     # 如果文件不存在会崩溃
     # 如果数据结构不同会报错
     # 没有任何提示
@@ -152,7 +152,7 @@ class Config:
     """集中管理所有配置参数"""
     
     # 文件路径
-    INPUT_FILE = './IPCAS_ExemplarData_ZXL_Sub14.mat'
+    INPUT_FILE = './data/IPCAS_ExemplarData_ZXL_Sub14.mat'
     OUTPUT_BASE_DIR = './visual_inducted_conscious/1'
     
     # 数据过滤条件
@@ -308,7 +308,7 @@ def filter_and_extract_data(
 ```python
 # 在 notebook 中导入
 import sys
-sys.path.append('./koopCE/neural_science')
+sys.path.append('./koopCE/neural_science/experiments')
 from read_data_improved import main, Config
 
 # 运行主程序
@@ -323,7 +323,7 @@ main()
 ### 方法 2: 命令行运行
 
 ```bash
-cd koopCE/neural_science
+cd koopCE/neural_science/experiments
 python read_data_improved.py
 ```
 
@@ -377,6 +377,6 @@ process_all_stages(train_data, test_data)
 
 ---
 
-**文件位置**: `koopCE/neural_science/read_data_improved.py`
+**文件位置**: `koopCE/neural_science/experiments/read_data_improved.py`
 
 **建议**: 使用改进版本替换原始 notebook，或在两个版本之间进行验证对比。
