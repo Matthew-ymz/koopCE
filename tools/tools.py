@@ -1079,12 +1079,12 @@ def compute_gram_matrix_for_sindy(library, sample_points_list, weights=None):
     assert M_check == M, f"样本数不匹配: {M_check} != {M}"
     
     # ========== 步骤3：处理权重 ==========
-    if weights is None or weights == "uniform":
+    if weights is None or (isinstance(weights, str) and weights == "uniform"):
         # 所有样本点等权重
         w = np.ones(M) / M
         print("使用均匀权重（所有样本等权重）")
         
-    elif weights == "traj":
+    elif isinstance(weights, str) and weights == "traj":
         # 按轨迹等权重：每条轨迹的权重和为 1/num_trajectories
         w = np.zeros(M)
         idx = 0
@@ -1119,3 +1119,220 @@ def compute_gram_matrix_for_sindy(library, sample_points_list, weights=None):
     print(f"Gram 矩阵形状: {G.shape}")
         
     return G
+
+
+def inverse_sqrt_psd(M, eps=1e-10):
+    """
+    对称半正定矩阵的稳定平方根和逆平方根。
+
+    参数
+    ----------
+    M : np.ndarray
+        对称半正定矩阵。
+    eps : float, optional
+        特征值截断阈值，避免数值不稳定。
+
+    返回
+    ----------
+    M_sqrt : np.ndarray
+        M 的平方根。
+    M_inv_sqrt : np.ndarray
+        M 的逆平方根（在截断后的支撑子空间上定义）。
+    evals : np.ndarray
+        原始特征值。
+    """
+    M_sym = 0.5 * (M + M.T)
+    evals, evecs = np.linalg.eigh(M_sym)
+    evals_clipped = np.clip(evals, eps, None)
+    M_inv_sqrt = evecs @ np.diag(1.0 / np.sqrt(evals_clipped)) @ evecs.T
+    M_sqrt = evecs @ np.diag(np.sqrt(evals_clipped)) @ evecs.T
+    return np.real_if_close(M_sqrt), np.real_if_close(M_inv_sqrt), evals
+
+
+def _stack_snapshot_pairs(sample_points_list, library=None, lag_steps=1):
+    """
+    将时间序列堆叠成一步转移配对样本 (X_t, X_{t+1})。
+    """
+    if lag_steps < 1:
+        raise ValueError(f"lag_steps 必须是正整数，得到 {lag_steps}")
+
+    x_pairs = []
+    y_pairs = []
+    pair_counts = []
+
+    for traj in sample_points_list:
+        if not isinstance(traj, np.ndarray):
+            raise TypeError(f"每个时间序列应该是 np.ndarray，得到 {type(traj)}")
+        if traj.ndim != 2:
+            raise ValueError(f"每个时间序列都应为二维数组，得到 shape={traj.shape}")
+        if traj.shape[0] <= lag_steps:
+            raise ValueError(
+                f"每条时间序列至少需要 {lag_steps + 1} 个时间点，"
+                f"才能构造 lag_steps={lag_steps} 的配对样本"
+            )
+
+        x_curr = traj[:-lag_steps]
+        x_next = traj[lag_steps:]
+        if library is not None:
+            x_curr = library.transform(x_curr)
+            x_next = library.transform(x_next)
+
+        x_pairs.append(x_curr)
+        y_pairs.append(x_next)
+        pair_counts.append(x_curr.shape[0])
+
+    X_all = np.vstack(x_pairs)
+    Y_all = np.vstack(y_pairs)
+    return X_all, Y_all, pair_counts
+
+
+def _build_pair_weights(num_pairs, pair_counts, weights=None):
+    """
+    为一步转移配对样本构造归一化权重。
+    """
+    if weights is None or (isinstance(weights, str) and weights == "uniform"):
+        w = np.ones(num_pairs) / num_pairs
+        weight_mode = "uniform"
+    elif isinstance(weights, str) and weights == "traj":
+        w = np.zeros(num_pairs)
+        idx = 0
+        num_traj = len(pair_counts)
+        for count in pair_counts:
+            w[idx: idx + count] = 1.0 / (num_traj * count)
+            idx += count
+        weight_mode = "traj"
+    elif isinstance(weights, np.ndarray):
+        if len(weights) != num_pairs:
+            raise ValueError(f"权重长度 {len(weights)} 与配对样本数 {num_pairs} 不匹配")
+        if np.any(weights < 0):
+            raise ValueError("权重必须非负")
+        total_weight = np.sum(weights)
+        if total_weight <= 0:
+            raise ValueError("权重和必须为正")
+        w = weights / total_weight
+        weight_mode = "custom"
+    else:
+        raise ValueError(f"不支持的权重类型: {type(weights)}")
+
+    return w, weight_mode
+
+
+def compute_transition_covariances(sample_points_list, library=None, weights=None, lag_steps=1):
+    """
+    根据 lagged 配对样本估计 C00, C01, C11。
+
+    参数
+    ----------
+    sample_points_list : list[np.ndarray]
+        每个元素是一条时间序列，shape 为 (T, d)。
+    library : optional
+        若提供，则先对 X_t 和 X_{t+1} 分别做 lift。
+    weights : {"uniform", "traj"} or np.ndarray, optional
+        配对样本权重。
+
+    返回
+    ----------
+    stats : dict
+        包含 C00, C01, C11, X, Y, weights, pair_counts。
+    """
+    X_all, Y_all, pair_counts = _stack_snapshot_pairs(
+        sample_points_list,
+        library=library,
+        lag_steps=lag_steps,
+    )
+    num_pairs = X_all.shape[0]
+    w, weight_mode = _build_pair_weights(num_pairs, pair_counts, weights=weights)
+
+    X_weighted = X_all * w[:, np.newaxis]
+    Y_weighted = Y_all * w[:, np.newaxis]
+
+    C00 = X_weighted.T @ X_all
+    C01 = X_weighted.T @ Y_all
+    C11 = Y_weighted.T @ Y_all
+
+    return {
+        "C00": np.real_if_close(C00),
+        "C01": np.real_if_close(C01),
+        "C11": np.real_if_close(C11),
+        "X": X_all,
+        "Y": Y_all,
+        "weights": w,
+        "weight_mode": weight_mode,
+        "pair_counts": pair_counts,
+        "lag_steps": lag_steps,
+    }
+
+
+def whiten_operator_matrix(A, C00, C11, eps=1e-10):
+    """
+    对行向量约定下的离散一步算子 A 做正确的双边白化。
+
+    这里 A 满足 Y ≈ X @ A，对应的白化矩阵为
+        K_bar = C00^{1/2} A C11^{-1/2}.
+
+    注意：只有当 A 与同一批配对样本诱导的 C00, C01 满足
+        A = C00^{dagger} C01
+    时，K_bar 才等于标准的
+        C00^{-1/2} C01 C11^{-1/2},
+    并自动具有奇异值不超过 1 的保证。
+    """
+    C00_sqrt, C00_inv_sqrt, evals00 = inverse_sqrt_psd(C00, eps=eps)
+    C11_sqrt, C11_inv_sqrt, evals11 = inverse_sqrt_psd(C11, eps=eps)
+    A_bar = C00_sqrt @ A @ C11_inv_sqrt
+    return {
+        "A_bar": np.real_if_close(A_bar),
+        "C00_sqrt": C00_sqrt,
+        "C00_inv_sqrt": C00_inv_sqrt,
+        "C11_sqrt": C11_sqrt,
+        "C11_inv_sqrt": C11_inv_sqrt,
+        "evals00": evals00,
+        "evals11": evals11,
+    }
+
+
+def fit_data_koopman_operator(
+    sample_points_list,
+    library=None,
+    weights=None,
+    eps=1e-10,
+    ridge=0.0,
+    lag_steps=1,
+):
+    """
+    用一步配对样本直接拟合离散 Koopman 矩阵，并返回正确双边白化后的矩阵。
+
+    对行向量约定 Y ≈ X @ A，有
+        A = C00^{dagger} C01,
+        K_bar = C00^{1/2} A C11^{-1/2} = C00^{-1/2} C01 C11^{-1/2}.
+
+    返回字典里同时包含：
+    - A：数据驱动拟合得到的一步离散算子
+    - K_bar：标准白化后的 Koopman 矩阵
+    - C00/C01/C11 以及对应的平方根、逆平方根
+    """
+    stats = compute_transition_covariances(
+        sample_points_list,
+        library=library,
+        weights=weights,
+        lag_steps=lag_steps,
+    )
+    C00 = stats["C00"]
+    C01 = stats["C01"]
+    C11 = stats["C11"]
+
+    if ridge > 0:
+        C00_reg = C00 + ridge * np.eye(C00.shape[0])
+    else:
+        C00_reg = C00
+
+    A = np.linalg.pinv(C00_reg) @ C01
+
+    whitening = whiten_operator_matrix(A, C00, C11, eps=eps)
+    K_bar_direct = whitening["C00_inv_sqrt"] @ C01 @ whitening["C11_inv_sqrt"]
+
+    result = dict(stats)
+    result.update(whitening)
+    result["A"] = np.real_if_close(A)
+    result["K_bar"] = np.real_if_close(K_bar_direct)
+    result["K_bar_from_A"] = whitening["A_bar"]
+    return result

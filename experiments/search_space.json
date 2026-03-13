@@ -1,0 +1,69 @@
+{
+  "objective": "Tune the double-whitened Kuramoto analysis so the empirical whitened Koopman spectrum exposes the true macro dimension (2) and the extracted macro signals align with the two cluster frequencies.",
+  "constraints": {
+    "primary_metric": "maximize rank-2 spectral identifiability while minimizing macro-to-cluster frequency mismatch",
+    "budget": "staged local sweep with broad exploration followed by local refinement",
+    "hardware": "local CPU only via /opt/anaconda3/envs/py311/bin/python"
+  },
+  "fixed": {
+    "N": 10,
+    "n_clusters": 2,
+    "K_intra": 5.0,
+    "K_inter": 0.11,
+    "noise": 0.0,
+    "dt": 0.01,
+    "T": 100,
+    "rank_target": 2
+  },
+  "parameters": [
+    {
+      "name": "burn_in",
+      "type": "integer",
+      "values": [500, 1000, 1500, 2000]
+    },
+    {
+      "name": "sample_stride",
+      "type": "integer",
+      "values": [1, 2, 5, 10, 20]
+    },
+    {
+      "name": "lag_steps",
+      "type": "integer",
+      "values": [1, 2, 5, 10, 20, 50, 100, 200]
+    },
+    {
+      "name": "library_kind",
+      "type": "categorical",
+      "values": ["identity", "fourier", "identity+fourier", "identity+polynomial"]
+    },
+    {
+      "name": "fourier_n_frequencies",
+      "type": "integer",
+      "values": [1, 2, 3]
+    },
+    {
+      "name": "poly_degree",
+      "type": "integer",
+      "values": [2]
+    },
+    {
+      "name": "center_features",
+      "type": "boolean",
+      "values": [false, true]
+    },
+    {
+      "name": "n_trajectories",
+      "type": "integer",
+      "values": [1, 3, 5]
+    },
+    {
+      "name": "weights_mode",
+      "type": "categorical",
+      "values": ["uniform", "traj"]
+    }
+  ],
+  "notes": [
+    "The broad search prioritizes lag, stride, and library choice because the baseline failure is a large near-1 singular-value plateau.",
+    "Model-fitting hyperparameters are secondary because the empirical whitened Koopman matrix drives the macro extraction."
+  ]
+}
